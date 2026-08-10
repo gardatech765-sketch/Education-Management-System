@@ -1,0 +1,206 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum Role {
+  ADMIN
+  TUTOR
+  OWNER
+  PARENT
+  STUDENT
+}
+
+enum PaymentStatus {
+  LUNAS
+  BELUM
+  CICILAN
+}
+
+enum PaymentMethod {
+  QRIS
+  TRANSFER
+  CASH
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  phone     String?
+  role      Role     @default(STUDENT)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tutorProfile   TutorProfile?
+  studentProfile StudentProfile?
+  parentProfile  ParentProfile?
+  
+  // Relations for admin/owner
+  createdSchedules Schedule[] @relation("AdminSchedules")
+}
+
+model TutorProfile {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  education      String?
+  subjects       Json // e.g., ["Matematika", "Fisika"]
+  levels         Json // e.g., ["SD", "SMP", "SMA"]
+  certificates   Json // file paths
+  hourlyRate     Float    @default(0)
+  teachingArea   String?
+  rating         Float    @default(0)
+  experienceYrs  Int      @default(0)
+  
+  schedules      Schedule[]
+  attendances    Attendance[]
+  reports        TeachingReport[]
+}
+
+model StudentProfile {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  school         String?
+  grade          String?
+  address        String?
+  googleMapsUrl  String?
+  parentId       String?
+  parent         ParentProfile? @relation(fields: [parentId], references: [id])
+  
+  schedules      Schedule[]
+  attendances    Attendance[]
+  payments       Payment[]
+  progress       StudentProgress[]
+}
+
+model ParentProfile {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  relationship   String?
+  address        String?
+  
+  students       StudentProfile[]
+}
+
+model Subject {
+  id          String   @id @default(uuid())
+  name        String
+  level       String   // SD, SMP, SMA, Pra Sekolah
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  schedules   Schedule[]
+}
+
+model Package {
+  id          String   @id @default(uuid())
+  name        String   // Reguler, Intensif, dll
+  description String?
+  price       Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  schedules   Schedule[]
+}
+
+model Schedule {
+  id          String   @id @default(uuid())
+  adminId     String?
+  admin       User?    @relation("AdminSchedules", fields: [adminId], references: [id])
+  tutorId     String
+  tutor       TutorProfile @relation(fields: [tutorId], references: [id])
+  studentId   String
+  student     StudentProfile @relation(fields: [studentId], references: [id])
+  subjectId   String
+  subject     Subject  @relation(fields: [subjectId], references: [id])
+  packageId   String?
+  package     Package? @relation(fields: [packageId], references: [id])
+  
+  date        DateTime
+  startTime   DateTime
+  endTime     DateTime
+  location    String
+  durationMin Int      @default(120)
+  
+  attendances Attendance[]
+  report      TeachingReport?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Attendance {
+  id          String   @id @default(uuid())
+  scheduleId  String
+  schedule    Schedule @relation(fields: [scheduleId], references: [id])
+  tutorId     String?
+  tutor       TutorProfile? @relation(fields: [tutorId], references: [id])
+  studentId   String?
+  student     StudentProfile? @relation(fields: [studentId], references: [id])
+  
+  checkInTime DateTime?
+  checkOutTime DateTime?
+  latitude    Float?
+  longitude   Float?
+  photoUrl    String?
+  
+  createdAt   DateTime @default(now())
+}
+
+model TeachingReport {
+  id          String   @id @default(uuid())
+  scheduleId  String   @unique
+  schedule    Schedule @relation(fields: [scheduleId], references: [id])
+  tutorId     String
+  tutor       TutorProfile @relation(fields: [tutorId], references: [id])
+  
+  material    String
+  subMaterial String?
+  target      String?
+  constraints String?
+  homework    String?
+  notes       String?
+  
+  // Penilaian Siswa
+  score       Float?
+  attitude    String?
+  
+  createdAt   DateTime @default(now())
+}
+
+model Payment {
+  id          String   @id @default(uuid())
+  studentId   String
+  student     StudentProfile @relation(fields: [studentId], references: [id])
+  
+  amount      Float
+  status      PaymentStatus @default(BELUM)
+  method      PaymentMethod?
+  invoiceUrl  String?
+  paymentDate DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model StudentProgress {
+  id          String   @id @default(uuid())
+  studentId   String
+  student     StudentProfile @relation(fields: [studentId], references: [id])
+  
+  period      String   // e.g., "Semester 1 2024"
+  notes       String
+  targetMet   Boolean  @default(false)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
