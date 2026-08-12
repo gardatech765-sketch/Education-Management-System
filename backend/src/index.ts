@@ -1,9 +1,13 @@
 import { Elysia, t } from "elysia";
 import { swagger } from "@elysiajs/swagger";
 import { jwt } from "@elysiajs/jwt";
+import { logger } from "@grotto/logysia";
 import { authRoutes } from "./routes/auth";
+import { courseRoutes } from "./routes/course";
 
 const app = new Elysia()
+  // Logger
+  .use(logger())
   // Swagger Documentation
   .use(
     swagger({
@@ -30,7 +34,7 @@ const app = new Elysia()
     })
   )
   // Mount Routes
-  .group("/api", (app) => app.use(authRoutes))
+  .group("/api", (app) => app.use(authRoutes).use(courseRoutes))
   
   .get("/", () => "Hello EMS Backend")
   .listen(3000);

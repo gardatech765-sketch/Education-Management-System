@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "mysql"
+  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -204,3 +205,9 @@ model StudentProgress {
   updatedAt   DateTime @updatedAt
 }
 
+model Course {
+  id          Int @id @default(autoincrement())
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+}
