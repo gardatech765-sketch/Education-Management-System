@@ -1,39 +1,65 @@
-import type { Context } from "elysia";
-import { registerUser, authenticateUser } from "../services/authService";
+import * as authService from "../services/authService";
 
-export const register = async ({ body, set }: any) => {
-  const { email, password, name, role } = body;
-
-  const res = await registerUser({ email, password, name, role });
-
-  if (!res.success) {
-    set.status = res.message === "Email already registered" ? 400 : 500;
-    return { success: false, message: res.message };
+// ─── Register ─────────────────────────────────────────────────────────────────
+export const registerHandler = async ({ body, set }: any) => {
+  try {
+    const user = await authService.register(body);
+    set.status = 201;
+    return { success: true, message: "Registrasi berhasil", data: user };
+  } catch (e: any) {
+    set.status = e.message === "Email sudah terdaftar" ? 409 : 400;
+    return { success: false, message: e.message };
   }
-
-  return {
-    success: true,
-    message: "User registered successfully",
-    user: res.user,
-  };
 };
 
-export const login = async ({ body, jwt, set }: any) => {
-  const { email, password } = body;
+// ─── Login ────────────────────────────────────────────────────────────────────
+export const loginHandler = async ({ body, jwt, request, set }: any) => {
+  try {
+    const ip_address =
+      request.headers.get("x-forwarded-for") ||
+      request.headers.get("x-real-ip") ||
+      undefined;
+    const user_agent = request.headers.get("user-agent") || undefined;
 
-  const res = await authenticateUser({ email, password });
+    const result = await authService.login(
+      body,
+      { ip_address, user_agent },
+      jwt.sign.bind(jwt)
+    );
 
-  if (!res.success) {
+    return { success: true, message: "Login berhasil", data: result };
+  } catch (e: any) {
     set.status = 401;
-    return { success: false, message: res.message };
+    return { success: false, message: e.message };
   }
+};
 
-  const token = await jwt.sign({ id: res.user.id, role: res.user.role });
+// ─── Logout ───────────────────────────────────────────────────────────────────
+export const logoutHandler = async ({ headers, set }: any) => {
+  try {
+    const authorization = headers["authorization"] || "";
+    const token = authorization.replace("Bearer ", "").trim();
 
-  return {
-    success: true,
-    message: "Login successful",
-    token,
-    user: res.user,
-  };
+    if (!token) {
+      set.status = 400;
+      return { success: false, message: "Token tidak ditemukan" };
+    }
+
+    await authService.logout(token);
+    return { success: true, message: "Logout berhasil" };
+  } catch (e: any) {
+    set.status = 500;
+    return { success: false, message: e.message };
+  }
+};
+
+// ─── Get Me ───────────────────────────────────────────────────────────────────
+export const getMeHandler = async ({ user, set }: any) => {
+  try {
+    const data = await authService.getMe(user.id);
+    return { success: true, data };
+  } catch (e: any) {
+    set.status = 404;
+    return { success: false, message: e.message };
+  }
 };

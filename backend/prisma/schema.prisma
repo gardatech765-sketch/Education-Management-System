@@ -7,203 +7,581 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  ADMIN
-  TUTOR
-  OWNER
-  PARENT
-  STUDENT
+// =========================================================
+// ENUMS
+// =========================================================
+
+enum JenisKelamin {
+  L
+  P
 }
 
-enum PaymentStatus {
-  LUNAS
-  BELUM
-  CICILAN
+enum Jenjang {
+  PRA_SEKOLAH @map("Pra-Sekolah")
+  SD
+  SMP
+  SMA
+  UMUM        @map("Umum")
 }
 
-enum PaymentMethod {
+enum OtpPurpose {
+  register
+  reset
+}
+
+enum StatusAkunTentor {
+  Pending
+  Approved
+  Suspended
+}
+
+enum TingkatKeahlian {
+  Basic
+  Intermediate
+  Expert
+}
+
+enum TipePengaturan {
+  STRING  @map("String")
+  INTEGER @map("Integer")
+  DECIMAL @map("Decimal")
+  BOOLEAN @map("Boolean")
+  JSON    @map("JSON")
+}
+
+enum Hari {
+  Senin
+  Selasa
+  Rabu
+  Kamis
+  Jumat
+  Sabtu
+  Minggu
+}
+
+enum StatusKontrak {
+  Aktif
+  Cuti
+  Selesai
+  Dibatalkan
+}
+
+enum StatusSesi {
+  Scheduled
+  Rescheduled
+  Ongoing
+  Done
+  Canceled
+}
+
+enum StatusHadir {
+  Hadir
+  Izin
+  Sakit
+  Alpa
+}
+
+enum StatusBayarTagihan {
+  Unpaid
+  Partial
+  Paid
+}
+
+enum TipeItemTagihan {
+  Penambahan
+  Potongan
+}
+
+enum MetodeBayar {
+  Transfer
   QRIS
-  TRANSFER
-  CASH
+  Cash
+}
+
+enum StatusValidasiBayar {
+  Pending
+  Valid
+  Invalid
+}
+
+enum StatusGaji {
+  Draft
+  Approved
+  Transferred
+}
+
+enum AksiLog {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+}
+
+// =========================================================
+// 1. MODUL AUTENTIKASI & KEAMANAN
+// =========================================================
+
+model Role {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  nama_role  String   @db.VarChar(50)
+  deskripsi  String?  @db.Text
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  users User[]
+
+  @@map("roles")
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  name      String
-  phone     String?
-  role      Role     @default(STUDENT)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(uuid()) @db.VarChar(36)
+  email       String    @unique @db.VarChar(150)
+  password    String    @db.VarChar(255)
+  role_id     String    @db.VarChar(36)
+  is_verified Boolean   @default(false)
+  is_active   Boolean   @default(true)
+  last_login  DateTime?
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
 
-  tutorProfile   TutorProfile?
-  studentProfile StudentProfile?
-  parentProfile  ParentProfile?
-  
-  // Relations for admin/owner
-  createdSchedules Schedule[] @relation("AdminSchedules")
+  role          Role           @relation(fields: [role_id], references: [id])
+  sessions      UserSession[]
+  otps          Otp[]
+  profil_tentor ProfilTentor?
+  profil_ortu   ProfilOrtu?
+  audit_logs    AuditLog[]
+  notifikasi    Notifikasi[]
+
+  @@index([email])
+  @@map("users")
 }
 
-model TutorProfile {
-  id             String   @id @default(uuid())
-  userId         String   @unique
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  education      String?
-  subjects       Json // e.g., ["Matematika", "Fisika"]
-  levels         Json // e.g., ["SD", "SMP", "SMA"]
-  certificates   Json // file paths
-  hourlyRate     Float    @default(0)
-  teachingArea   String?
-  rating         Float    @default(0)
-  experienceYrs  Int      @default(0)
-  
-  schedules      Schedule[]
-  attendances    Attendance[]
-  reports        TeachingReport[]
+model UserSession {
+  id          String    @id @default(uuid()) @db.VarChar(36)
+  user_id     String    @db.VarChar(36)
+  token_jwt   String    @db.Text
+  device_id   String?   @db.VarChar(255)
+  ip_address  String?   @db.VarChar(45)
+  user_agent  String?   @db.Text
+  last_active DateTime?
+  expired_at  DateTime?
+  is_active   Boolean   @default(true)
+  created_at  DateTime  @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
 }
 
-model StudentProfile {
-  id             String   @id @default(uuid())
-  userId         String   @unique
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  school         String?
-  grade          String?
-  address        String?
-  googleMapsUrl  String?
-  parentId       String?
-  parent         ParentProfile? @relation(fields: [parentId], references: [id])
-  
-  schedules      Schedule[]
-  attendances    Attendance[]
-  payments       Payment[]
-  progress       StudentProgress[]
+model Otp {
+  id         String     @id @default(uuid()) @db.VarChar(36)
+  user_id    String     @db.VarChar(36)
+  otp_code   String     @db.VarChar(10)
+  purpose    OtpPurpose
+  expired_at DateTime
+  is_used    Boolean    @default(false)
+  created_at DateTime   @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("otps")
 }
 
-model ParentProfile {
-  id             String   @id @default(uuid())
-  userId         String   @unique
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  relationship   String?
-  address        String?
-  
-  students       StudentProfile[]
+// =========================================================
+// 2. MODUL PROFIL ENTITAS UTAMA
+// =========================================================
+
+model ProfilTentor {
+  id                  String           @id @default(uuid()) @db.VarChar(36)
+  user_id             String           @unique @db.VarChar(36)
+  nik                 String           @unique @db.VarChar(16)
+  nama_lengkap        String           @db.VarChar(150)
+  jenis_kelamin       JenisKelamin
+  no_wa               String           @db.VarChar(20)
+  alamat_domisili     String?          @db.Text
+  maps_place_id       String?          @db.VarChar(255)
+  latitude            Decimal?         @db.Decimal(10, 8)
+  longitude           Decimal?         @db.Decimal(11, 8)
+  pendidikan_terakhir String?          @db.VarChar(100)
+  file_cv             String?          @db.VarChar(255)
+  file_ijazah         String?          @db.VarChar(255)
+  status_akun         StatusAkunTentor @default(Pending)
+  tanggal_bergabung   DateTime?        @db.Date
+  created_at          DateTime         @default(now())
+  updated_at          DateTime         @updatedAt
+
+  user                User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  tentor_mapel        TentorMapel[]
+  ketersediaan_tentor KetersediaanTentor[]
+  kontrak_les         KontrakLes[]
+  gaji_tentor         GajiTentor[]
+
+  @@map("profil_tentor")
 }
 
-model Subject {
-  id          String   @id @default(uuid())
-  name        String
-  level       String   // SD, SMP, SMA, Pra Sekolah
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  schedules   Schedule[]
+model ProfilOrtu {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  user_id        String   @unique @db.VarChar(36)
+  nama_wali      String   @db.VarChar(150)
+  no_wa          String   @db.VarChar(20)
+  alamat_rumah   String?  @db.Text
+  maps_place_id  String?  @db.VarChar(255)
+  latitude       Decimal? @db.Decimal(10, 8)
+  longitude      Decimal? @db.Decimal(11, 8)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  user          User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  profil_siswa  ProfilSiswa[]
+  rating_tentor RatingTentor[]
+  tagihan_ortu  TagihanOrtu[]
+
+  @@map("profil_ortu")
 }
 
-model Package {
-  id          String   @id @default(uuid())
-  name        String   // Reguler, Intensif, dll
-  description String?
-  price       Float
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  schedules   Schedule[]
+model ProfilSiswa {
+  id               String   @id @default(uuid()) @db.VarChar(36)
+  ortu_id          String   @db.VarChar(36)
+  nama_siswa       String   @db.VarChar(150)
+  jenis_kelamin    JenisKelamin
+  asal_sekolah     String?  @db.VarChar(150)
+  jenjang          Jenjang
+  kelas            String?  @db.VarChar(20)
+  catatan_khusus   String?  @db.Text
+  is_active        Boolean  @default(true)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  ortu        ProfilOrtu   @relation(fields: [ortu_id], references: [id], onDelete: Cascade)
+  kontrak_les KontrakLes[]
+
+  @@map("profil_siswa")
 }
 
-model Schedule {
-  id          String   @id @default(uuid())
-  adminId     String?
-  admin       User?    @relation("AdminSchedules", fields: [adminId], references: [id])
-  tutorId     String
-  tutor       TutorProfile @relation(fields: [tutorId], references: [id])
-  studentId   String
-  student     StudentProfile @relation(fields: [studentId], references: [id])
-  subjectId   String
-  subject     Subject  @relation(fields: [subjectId], references: [id])
-  packageId   String?
-  package     Package? @relation(fields: [packageId], references: [id])
-  
-  date        DateTime
-  startTime   DateTime
-  endTime     DateTime
-  location    String
-  durationMin Int      @default(120)
-  
-  attendances Attendance[]
-  report      TeachingReport?
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+// =========================================================
+// 3. MODUL MASTER DATA AKADEMIK & PENGATURAN
+// =========================================================
+
+model MataPelajaran {
+  id          Int      @id @default(autoincrement())
+  nama_mapel  String   @db.VarChar(100)
+  jenjang     Jenjang
+  deskripsi   String?  @db.Text
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  tentor_mapel TentorMapel[]
+  kontrak_les  KontrakLes[]
+
+  @@map("mata_pelajaran")
 }
 
-model Attendance {
-  id          String   @id @default(uuid())
-  scheduleId  String
-  schedule    Schedule @relation(fields: [scheduleId], references: [id])
-  tutorId     String?
-  tutor       TutorProfile? @relation(fields: [tutorId], references: [id])
-  studentId   String?
-  student     StudentProfile? @relation(fields: [studentId], references: [id])
-  
-  checkInTime DateTime?
-  checkOutTime DateTime?
-  latitude    Float?
-  longitude   Float?
-  photoUrl    String?
-  
-  createdAt   DateTime @default(now())
+model TentorMapel {
+  id               String           @id @default(uuid()) @db.VarChar(36)
+  tentor_id        String           @db.VarChar(36)
+  mapel_id         Int
+  tingkat_keahlian TingkatKeahlian?
+  is_active        Boolean          @default(true)
+  created_at       DateTime         @default(now())
+  updated_at       DateTime         @updatedAt
+
+  tentor ProfilTentor  @relation(fields: [tentor_id], references: [id], onDelete: Cascade)
+  mapel  MataPelajaran @relation(fields: [mapel_id], references: [id])
+
+  @@map("tentor_mapel")
 }
 
-model TeachingReport {
-  id          String   @id @default(uuid())
-  scheduleId  String   @unique
-  schedule    Schedule @relation(fields: [scheduleId], references: [id])
-  tutorId     String
-  tutor       TutorProfile @relation(fields: [tutorId], references: [id])
-  
-  material    String
-  subMaterial String?
-  target      String?
-  constraints String?
-  homework    String?
-  notes       String?
-  
-  // Penilaian Siswa
-  score       Float?
-  attitude    String?
-  
-  createdAt   DateTime @default(now())
+model PaketLes {
+  id                  Int      @id @default(autoincrement())
+  nama_paket          String   @db.VarChar(100)
+  deskripsi           String?  @db.Text
+  harga_dasar_ortu    Decimal  @db.Decimal(12, 2)
+  honor_dasar_tentor  Decimal  @db.Decimal(12, 2)
+  durasi_menit        Int
+  minimal_sesi        Int      @default(1)
+  is_active           Boolean  @default(true)
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  kontrak_les KontrakLes[]
+
+  @@map("paket_les")
 }
 
-model Payment {
-  id          String   @id @default(uuid())
-  studentId   String
-  student     StudentProfile @relation(fields: [studentId], references: [id])
-  
-  amount      Float
-  status      PaymentStatus @default(BELUM)
-  method      PaymentMethod?
-  invoiceUrl  String?
-  paymentDate DateTime?
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model PengaturanSistem {
+  id         Int            @id @default(autoincrement())
+  kunci      String         @unique @db.VarChar(100)
+  nilai      String?        @db.VarChar(250)
+  tipe       TipePengaturan
+  deskripsi  String?        @db.Text
+  created_at DateTime       @default(now())
+  updated_at DateTime       @updatedAt
+
+  @@map("pengaturan_sistem")
 }
 
-model StudentProgress {
-  id          String   @id @default(uuid())
-  studentId   String
-  student     StudentProfile @relation(fields: [studentId], references: [id])
-  
-  period      String   // e.g., "Semester 1 2024"
-  notes       String
-  targetMet   Boolean  @default(false)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+// =========================================================
+// 4. MODUL PENJADWALAN, KETERSEDIAAN & ALOKASI JARAK
+// =========================================================
+
+model KetersediaanTentor {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  tentor_id   String   @db.VarChar(36)
+  hari        Hari
+  jam_mulai   DateTime @db.Time()
+  jam_selesai DateTime @db.Time()
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  tentor ProfilTentor @relation(fields: [tentor_id], references: [id], onDelete: Cascade)
+
+  @@map("ketersediaan_tentor")
 }
+
+model KontrakLes {
+  id                 String        @id @default(uuid()) @db.VarChar(36)
+  siswa_id           String        @db.VarChar(36)
+  tentor_id          String        @db.VarChar(36)
+  mapel_id           Int
+  paket_id           Int
+  hari_rutin         Hari
+  jam_mulai          DateTime      @db.Time()
+  jam_selesai        DateTime      @db.Time()
+  jarak_km           Decimal       @db.Decimal(5, 2)
+  biaya_sesi_ortu    Decimal       @db.Decimal(12, 2)
+  honor_sesi_tentor  Decimal       @db.Decimal(12, 2)
+  biaya_transport    Decimal       @db.Decimal(12, 2)
+  catatan            String?       @db.Text
+  status_kontrak     StatusKontrak @default(Aktif)
+  tanggal_mulai      DateTime      @db.Date
+  tanggal_selesai    DateTime?     @db.Date
+  created_at         DateTime      @default(now())
+  updated_at         DateTime      @updatedAt
+
+  siswa    ProfilSiswa   @relation(fields: [siswa_id], references: [id])
+  tentor   ProfilTentor  @relation(fields: [tentor_id], references: [id])
+  mapel    MataPelajaran @relation(fields: [mapel_id], references: [id])
+  paket    PaketLes      @relation(fields: [paket_id], references: [id])
+  sesi_kbm SesiKbm[]
+
+  @@map("kontrak_les")
+}
+
+model SesiKbm {
+  id                 String     @id @default(uuid()) @db.VarChar(36)
+  kontrak_id         String     @db.VarChar(36)
+  tanggal_sesi       DateTime   @db.Date
+  jam_mulai_plan     DateTime   @db.Time()
+  jam_selesai_plan   DateTime   @db.Time()
+  status_sesi        StatusSesi @default(Scheduled)
+  alasan_reschedule  String?    @db.Text
+  created_at         DateTime   @default(now())
+  updated_at         DateTime   @updatedAt
+
+  kontrak         KontrakLes      @relation(fields: [kontrak_id], references: [id], onDelete: Cascade)
+  presensi        Presensi?
+  laporan_belajar LaporanBelajar?
+  rating_tentor   RatingTentor[]
+  detail_tagihan  DetailTagihan[]
+
+  @@map("sesi_kbm")
+}
+
+// =========================================================
+// 5. MODUL EKSEKUSI LAPANGAN & KEAMANAN LOKASI
+// =========================================================
+
+model Presensi {
+  id               String      @id @default(uuid()) @db.VarChar(36)
+  sesi_id          String      @unique @db.VarChar(36)
+  waktu_checkin    DateTime?
+  lat_checkin      Decimal?    @db.Decimal(10, 8)
+  long_checkin     Decimal?    @db.Decimal(11, 8)
+  jarak_meter_in   Int?
+  is_valid_geo_in  Boolean?
+  mock_loc_in      Boolean?
+  foto_checkin     String?     @db.VarChar(255)
+  waktu_checkout   DateTime?
+  lat_checkout     Decimal?    @db.Decimal(10, 8)
+  long_checkout    Decimal?    @db.Decimal(11, 8)
+  mock_loc_out     Boolean?
+  foto_checkout    String?     @db.VarChar(255)
+  device_id        String?     @db.VarChar(255)
+  ip_address       String?     @db.VarChar(45)
+  status_hadir     StatusHadir
+  keterangan       String?     @db.Text
+  created_at       DateTime    @default(now())
+  updated_at       DateTime    @updatedAt
+
+  sesi SesiKbm @relation(fields: [sesi_id], references: [id], onDelete: Cascade)
+
+  @@map("presensi")
+}
+
+model LaporanBelajar {
+  id               String   @id @default(uuid()) @db.VarChar(36)
+  sesi_id          String   @unique @db.VarChar(36)
+  materi           String   @db.VarChar(255)
+  sub_materi       String?  @db.VarChar(255)
+  kendala_siswa    String?  @db.Text
+  pr_diberikan     String?  @db.Text
+  nilai_harian     Int?
+  catatan_tentor   String?  @db.Text
+  is_read_by_ortu  Boolean  @default(false)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  sesi SesiKbm @relation(fields: [sesi_id], references: [id], onDelete: Cascade)
+
+  @@map("laporan_belajar")
+}
+
+model RatingTentor {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  sesi_id      String   @db.VarChar(36)
+  ortu_id      String   @db.VarChar(36)
+  skor_bintang Int
+  ulasan_teks  String?  @db.Text
+  is_active    Boolean  @default(true)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  sesi SesiKbm    @relation(fields: [sesi_id], references: [id], onDelete: Cascade)
+  ortu ProfilOrtu @relation(fields: [ortu_id], references: [id])
+
+  @@map("rating_tentor")
+}
+
+// =========================================================
+// 6. MODUL FINANSIAL FLEKSIBEL (TAGIHAN & PENGGAJIAN)
+// =========================================================
+
+model TagihanOrtu {
+  id             String             @id @default(uuid()) @db.VarChar(36)
+  ortu_id        String             @db.VarChar(36)
+  no_invoice     String             @unique @db.VarChar(50)
+  periode_bulan  String             @db.VarChar(20)
+  total_sesi     Int
+  total_tagihan  Decimal            @db.Decimal(12, 2)
+  status_bayar   StatusBayarTagihan @default(Unpaid)
+  jatuh_tempo    DateTime           @db.Date
+  created_at     DateTime           @default(now())
+  updated_at     DateTime           @updatedAt
+
+  ortu           ProfilOrtu      @relation(fields: [ortu_id], references: [id])
+  detail_tagihan DetailTagihan[]
+  item_tagihan   ItemTagihan[]
+  pembayaran     Pembayaran[]
+
+  @@map("tagihan_ortu")
+}
+
+model DetailTagihan {
+  id                 String   @id @default(uuid()) @db.VarChar(36)
+  tagihan_id         String   @db.VarChar(36)
+  sesi_id            String   @db.VarChar(36)
+  nominal_sesi       Decimal  @db.Decimal(12, 2)
+  nominal_transport  Decimal  @db.Decimal(12, 2)
+  created_at         DateTime @default(now())
+
+  tagihan TagihanOrtu @relation(fields: [tagihan_id], references: [id], onDelete: Cascade)
+  sesi    SesiKbm     @relation(fields: [sesi_id], references: [id])
+
+  @@map("detail_tagihan")
+}
+
+model ItemTagihan {
+  id          String          @id @default(uuid()) @db.VarChar(36)
+  tagihan_id  String          @db.VarChar(36)
+  nama_item   String          @db.VarChar(255)
+  tipe_item   TipeItemTagihan
+  nominal     Decimal         @db.Decimal(12, 2)
+  keterangan  String?         @db.Text
+  created_at  DateTime        @default(now())
+
+  tagihan TagihanOrtu @relation(fields: [tagihan_id], references: [id], onDelete: Cascade)
+
+  @@map("item_tagihan")
+}
+
+model Pembayaran {
+  id                  String               @id @default(uuid()) @db.VarChar(36)
+  tagihan_id          String               @db.VarChar(36)
+  tanggal_bayar       DateTime
+  metode_bayar        MetodeBayar
+  referensi_gateway   String?              @db.VarChar(255)
+  nominal_bayar       Decimal?             @db.Decimal(12, 2)
+  bukti_struk         String               @db.VarChar(255)
+  status_validasi     StatusValidasiBayar  @default(Pending)
+  catatan_admin       String?              @db.Text
+  created_at          DateTime             @default(now())
+  updated_at          DateTime             @updatedAt
+
+  tagihan TagihanOrtu @relation(fields: [tagihan_id], references: [id], onDelete: Cascade)
+
+  @@map("pembayaran")
+}
+
+model GajiTentor {
+  id                 String     @id @default(uuid()) @db.VarChar(36)
+  tentor_id          String     @db.VarChar(36)
+  periode_bulan      String     @db.VarChar(20)
+  total_honor_ajar   Decimal    @db.Decimal(12, 2)
+  total_transport    Decimal    @db.Decimal(12, 2)
+  bonus_tambahan     Decimal    @db.Decimal(12, 2)
+  potongan_denda     Decimal    @db.Decimal(12, 2)
+  total_terima       Decimal    @db.Decimal(12, 2)
+  status_gaji        StatusGaji @default(Draft)
+  tanggal_transfer   DateTime?
+  metode_transfer    String?    @db.VarChar(100)
+  file_slip          String?    @db.VarChar(255)
+  created_at         DateTime   @default(now())
+  updated_at         DateTime   @updatedAt
+
+  tentor ProfilTentor @relation(fields: [tentor_id], references: [id])
+
+  @@map("gaji_tentor")
+}
+
+// =========================================================
+// 7. MODUL MONITORING, LOG & NOTIFIKASI
+// =========================================================
+
+model AuditLog {
+  id            String   @id @default(uuid()) @db.VarChar(36)
+  user_id       String   @db.VarChar(36)
+  modul         String   @db.VarChar(100)
+  aksi          AksiLog
+  payload_lama  Json?
+  payload_baru  Json?
+  ip_address    String   @db.VarChar(45)
+  created_at    DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@map("audit_logs")
+}
+
+model Notifikasi {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  user_id        String   @db.VarChar(36)
+  judul          String   @db.VarChar(150)
+  pesan          String   @db.Text
+  tipe_notif     String   @db.VarChar(50)
+  data_referensi Json?
+  is_read        Boolean  @default(false)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("notifikasi")
+}
+
 
 model Course {
   id          Int @id @default(autoincrement())

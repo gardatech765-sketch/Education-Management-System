@@ -1,4 +1,4 @@
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { swagger } from "@elysiajs/swagger";
 import { jwt } from "@elysiajs/jwt";
 import { logger } from "@grotto/logysia";
@@ -20,13 +20,23 @@ const app = new Elysia()
           description: "Education Management System API for private tutoring",
         },
         tags: [
-          { name: "Auth", description: "Authentication endpoints" },
-          { name: "Admin", description: "Admin related endpoints" }
+          { name: "Auth", description: "Autentikasi & sesi user" },
+          { name: "Course", description: "Manajemen course" },
+          { name: "Admin", description: "Admin related endpoints" },
         ],
+        components: {
+          securitySchemes: {
+            BearerAuth: {
+              type: "http",
+              scheme: "bearer",
+              bearerFormat: "JWT",
+            },
+          },
+        },
       },
     })
   )
-  // JWT Configuration
+  // JWT Configuration (global — dipakai juga di middleware)
   .use(
     jwt({
       name: "jwt",
@@ -35,7 +45,7 @@ const app = new Elysia()
   )
   // Mount Routes
   .group("/api", (app) => app.use(authRoutes).use(courseRoutes))
-  
+
   .get("/", () => "Hello EMS Backend")
   .listen(3000);
 

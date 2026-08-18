@@ -1,49 +1,47 @@
-import { Elysia } from "elysia";
-import { jwt } from "@elysiajs/jwt";
+import { jwtVerify } from "jose";
+import prisma from "../prisma/client";
 
-export const authMiddleware = new Elysia()
-  .use(
-    jwt({
-      name: "jwt",
-      secret: process.env.JWT_SECRET || "super_secret_jwt_key_here",
-    })
-  )
-  .derive(async ({ jwt, headers, set }) => {
+const JWT_SECRET = process.env.JWT_SECRET || "super_secret_jwt_key_here";
+const secret = new TextEncoder().encode(JWT_SECRET);
+
+/**
+ * Fungsi helper: verifikasi token dari header Authorization.
+ * Dipakai langsung di dalam derive() di setiap route yang butuh auth.
+ */
+export const verifyToken = async (headers: Record<string, string | undefined>) => {
+  try {
     const authorization = headers["authorization"];
     if (!authorization || !authorization.startsWith("Bearer ")) {
-      return { user: null };
+      return null;
     }
 
-    const token = authorization.split(" ")[1];
-    const user = await jwt.verify(token);
+    const token = authorization.slice(7).trim();
 
-    if (!user) {
-      return { user: null };
-    }
+    // Verifikasi signature JWT
+    const { payload } = await jwtVerify(token, secret);
 
-    return { user };
-  });
-
-export const requireAuth = (app: Elysia) =>
-  app
-    .use(authMiddleware)
-    .onBeforeHandle(({ user, set }) => {
-      if (!user) {
-        set.status = 401;
-        return { success: false, message: "Unauthorized" };
-      }
+    // Cek session di DB: harus aktif dan belum expired
+    const session = await prisma.userSession.findFirst({
+      where: {
+        token_jwt: token,
+        is_active: true,
+        OR: [
+          { expired_at: null },
+          { expired_at: { gt: new Date() } },
+        ],
+      },
     });
 
-export const requireRole = (roles: string[]) => (app: Elysia) =>
-  app
-    .use(authMiddleware)
-    .onBeforeHandle(({ user, set }: any) => {
-      if (!user) {
-        set.status = 401;
-        return { success: false, message: "Unauthorized" };
-      }
-      if (!roles.includes(user.role as string)) {
-        set.status = 403;
-        return { success: false, message: "Forbidden" };
-      }
+    if (!session) return null;
+
+    // Update last_active
+    await prisma.userSession.update({
+      where: { id: session.id },
+      data: { last_active: new Date() },
     });
+
+    return payload as Record<string, any>;
+  } catch {
+    return null;
+  }
+};
