@@ -59,10 +59,10 @@ export default function Sidebar({
           {!collapsed && (
             <div className="min-w-0">
               <p className="truncate text-sm font-bold leading-tight text-zinc-900">
-                BIMBEL PRIVAT
+                KelasOne
               </p>
               <p className="truncate text-xs leading-tight text-zinc-500">
-                Edukom Jaya Abadi
+                Untuk Masa Depan Gemilang
               </p>
             </div>
           )}
